@@ -115,5 +115,4 @@ try {
 }
 
 echo json_encode(['bi_data'=>$bi,'generated_at'=>date('c')]);
-file_put_contents('debug_bi.json', json_encode(['bi_data'=>$bi,'bi_type'=>gettype($bi['status_dist'])]));
 exit;

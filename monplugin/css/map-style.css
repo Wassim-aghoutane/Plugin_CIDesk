@@ -658,6 +658,7 @@
 /* ── TOGGLE MODE JOUR/NUIT ────────────────────────────────────── */
 .geo-mode-toggle {
     display     : flex;
+    flex-wrap   : wrap;
     background  : var(--cid-navy-light);
     border-radius: 8px;
     padding     : 3px;
@@ -673,6 +674,7 @@
     background : transparent;
     color      : var(--cid-muted);
     font-weight: 600;
+    white-space: nowrap;
 }
 .geo-mode-btn.active {
     background : #fff;

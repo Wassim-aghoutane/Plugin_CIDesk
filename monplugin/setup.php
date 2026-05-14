@@ -8,6 +8,7 @@ function plugin_init_monplugin()
     $PLUGIN_HOOKS['csrf_compliant']['monplugin'] = true;
 
     include_once(__DIR__ . '/hook.php');
+    plugin_monplugin_start_helpdesk_import_rewrite();
     plugin_monplugin_inject_css();
 
     $PLUGIN_HOOKS['display_login']['monplugin'] = 'plugin_monplugin_display_login';

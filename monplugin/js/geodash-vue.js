@@ -36,9 +36,16 @@
     const REFRESH = 60000;
     const CENTER  = [31.7917, -7.0926];
     const TILES   = {
-        dark : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+        dark: {
+            base: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+            ref : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+        },
+        light: {
+            base: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+            ref : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+        },
     };
+    const TILE_ATTRIBUTION = 'Tiles &copy; Esri';
     const CRIT = {
         high  : { bg: '#d4521c', lbl: 'ÉLEVÉE'  },
         medium: { bg: '#2e7fba', lbl: 'MOYENNE' },
@@ -179,10 +186,12 @@
                 const lq = q.toLowerCase();
                 markersList.forEach(m => { const ok = !q || m.options.siteData.name.toLowerCase().includes(lq); m.setOpacity(ok ? 1 : 0.1); m.setZIndexOffset(ok ? 1000 : -1000); });
             });
-            function toggleTile() {
-                if (!map) return;
-                map.removeLayer(tileLayers[tileMode.value]);
-                tileMode.value = tileMode.value === 'dark' ? 'light' : 'dark';
+            function setTileMode(mode) {
+                if (!map || !tileLayers[mode] || tileMode.value === mode) return;
+                if (tileLayers[tileMode.value] && map.hasLayer(tileLayers[tileMode.value])) {
+                    map.removeLayer(tileLayers[tileMode.value]);
+                }
+                tileMode.value = mode;
                 tileLayers[tileMode.value].addTo(map);
             }
             function exportPDF() {
@@ -206,8 +215,14 @@
                     return;
                 }
 
-                tileLayers.dark  = L.tileLayer(TILES.dark,  { attribution: '© CARTO', maxZoom: 19 });
-                tileLayers.light = L.tileLayer(TILES.light, { attribution: '© CARTO', maxZoom: 19 });
+                tileLayers.dark = L.layerGroup([
+                    L.tileLayer(TILES.dark.base, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }),
+                    L.tileLayer(TILES.dark.ref,  { attribution: TILE_ATTRIBUTION, maxZoom: 19 })
+                ]);
+                tileLayers.light = L.layerGroup([
+                    L.tileLayer(TILES.light.base, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }),
+                    L.tileLayer(TILES.light.ref,  { attribution: TILE_ATTRIBUTION, maxZoom: 19 })
+                ]);
                 map = L.map('map-container', { zoomControl: true }).setView(CENTER, 6);
                 tileLayers.dark.addTo(map);
                 const cc = L.control({ position: 'topleft' });
@@ -252,8 +267,8 @@
                         ]),
                         h('div', { class: 'geo-header-right' }, [
                             h('div', { class: 'geo-mode-toggle' }, [
-                                h('button', { class: 'geo-mode-btn' + (tileMode.value === 'light' ? ' active' : ''), onClick: () => { if (tileMode.value !== 'light') toggleTile(); } }, '☀️ Jour'),
-                                h('button', { class: 'geo-mode-btn' + (tileMode.value === 'dark' ? ' active' : ''), onClick: () => { if (tileMode.value !== 'dark') toggleTile(); } }, '🌙 Nuit'),
+                                h('button', { class: 'geo-mode-btn' + (tileMode.value === 'light' ? ' active' : ''), onClick: () => setTileMode('light') }, 'Jour'),
+                                h('button', { class: 'geo-mode-btn' + (tileMode.value === 'dark' ? ' active' : ''), onClick: () => setTileMode('dark') }, 'Nuit'),
                             ]),
                             h('button', { class: 'geo-header-btn btn-export', onClick: exportPDF, disabled: isExporting.value }, [ic('ti ti-file-export'), ' ', isExporting.value ? 'Export…' : 'Rapport PDF']),
                             h('button', { class: 'geo-header-btn btn-refresh', onClick: loadData }, [ic('ti ti-refresh'), ' Actualiser']),

@@ -12,12 +12,144 @@
  * Page centrale : TOUS les profils — seul l'onglet "Flux RSS" est masqué
  */
 
+function plugin_monplugin_start_helpdesk_import_rewrite()
+{
+    $request_uri = $_SERVER['REQUEST_URI'] ?? '';
+    $is_helpdesk = strpos($request_uri, '/Helpdesk') !== false
+        || strpos($request_uri, '/front/helpdesk') !== false;
+
+    if (!$is_helpdesk || defined('PLUGIN_MONPLUGIN_HELPDESK_REWRITE_STARTED')) {
+        return;
+    }
+
+    define('PLUGIN_MONPLUGIN_HELPDESK_REWRITE_STARTED', true);
+    ob_start('plugin_monplugin_rewrite_helpdesk_imports');
+}
+
+function plugin_monplugin_rewrite_helpdesk_imports($buffer)
+{
+    global $CFG_GLPI;
+
+    $root_doc = isset($CFG_GLPI['root_doc']) ? rtrim((string) $CFG_GLPI['root_doc'], '/') : '';
+    $module_path = $root_doc . '/js/modules/Helpdesk/IndexController.js';
+
+    $buffer = str_replace(
+        [
+            "'js/modules/Helpdesk/IndexController.js'",
+            '"js/modules/Helpdesk/IndexController.js"',
+            '`js/modules/Helpdesk/IndexController.js`',
+        ],
+        [
+            "'" . $module_path . "'",
+            '"' . $module_path . '"',
+            '`' . $module_path . '`',
+        ],
+        $buffer
+    );
+
+    if (
+        strpos($buffer, 'search-bar-container-placeholder') !== false
+        && strpos($buffer, 'id="search-input"') === false
+    ) {
+        $search_markup = <<<'HTML'
+<div class="search-bar-container-placeholder">
+    <div id="search-overlay" class="search-overlay" style="opacity:0;visibility:hidden;"></div>
+    <div class="search-bar-container">
+        <div class="input-icon">
+            <span class="input-icon-addon">
+                <i class="ti ti-search"></i>
+            </span>
+            <input
+                type="search"
+                id="search-input"
+                class="form-control home-search"
+                autocomplete="off"
+                placeholder="Rechercher dans l'assistance">
+        </div>
+        <div id="search-results" class="search-results d-none"></div>
+    </div>
+</div>
+HTML;
+
+        $buffer = preg_replace(
+            '/<div\s+class="search-bar-container-placeholder"\s*>\s*<\/div>/',
+            $search_markup,
+            $buffer,
+            1
+        );
+    }
+
+    return $buffer;
+}
+
+function plugin_monplugin_is_selfservice_profile(): bool
+{
+    if (!isset($_SESSION['glpiactiveprofile']) || !is_array($_SESSION['glpiactiveprofile'])) {
+        return false;
+    }
+
+    $profile = $_SESSION['glpiactiveprofile'];
+    $profile_id = isset($profile['id']) ? (int) $profile['id'] : 0;
+
+    if ($profile_id === 1) {
+        return true;
+    }
+
+    $interface = strtolower((string) ($profile['interface'] ?? ''));
+    if (in_array($interface, ['helpdesk', 'simplified'], true)) {
+        return true;
+    }
+
+    $profile_text = trim(
+        (string) ($profile['name'] ?? '') . ' '
+        . (string) ($profile['interface'] ?? '') . ' '
+        . (string) ($profile['label'] ?? '')
+    );
+    $profile_text = function_exists('mb_strtolower')
+        ? mb_strtolower($profile_text, 'UTF-8')
+        : strtolower($profile_text);
+
+    return strpos($profile_text, 'employ') !== false
+        || strpos($profile_text, 'manager') !== false
+        || strpos($profile_text, 'self') !== false
+        || strpos($profile_text, 'demandeur') !== false;
+}
+
+function plugin_monplugin_is_form_render_route(string $request_uri): bool
+{
+    return preg_match('#/Form/Render(?:/|$|\?)#', $request_uri) === 1;
+}
+
+function plugin_monplugin_add_selfservice_assets(): void
+{
+    global $PLUGIN_HOOKS;
+
+    $PLUGIN_HOOKS['add_css']['monplugin'] = [
+        'front/asset.php?type=css&file=custom.css',
+        'front/asset.php?type=css&file=employe.css',
+    ];
+
+    $PLUGIN_HOOKS['add_javascript']['monplugin'][] = 'front/asset.php?type=js&file=effects.js';
+}
+
 function plugin_monplugin_inject_css()
 {
     global $PLUGIN_HOOKS;
 
     $request_uri = $_SERVER['REQUEST_URI'] ?? '';
     if (strpos($request_uri, '/plugins/monplugin/front/dashboard.php') !== false) {
+        return;
+    }
+
+    $is_helpdesk = strpos($request_uri, '/Helpdesk') !== false
+        || strpos($request_uri, '/front/helpdesk') !== false;
+    $is_ticket_page = strpos($request_uri, '/front/ticket.php') !== false;
+    $is_form_render = plugin_monplugin_is_form_render_route($request_uri);
+
+    if (
+        strpos($request_uri, '/front/marketplace.php') !== false
+        || strpos($request_uri, '/front/plugin.php') !== false
+    ) {
         return;
     }
 
@@ -30,8 +162,12 @@ function plugin_monplugin_inject_css()
         'front/asset.php?type=js&file=helpdesk-importmap-fix.js',
     ];
 
+    if ($is_helpdesk) {
+        plugin_monplugin_add_selfservice_assets();
+        return;
+    }
+
     $profile_id = (int) $_SESSION['glpiactiveprofile']['id'];
-    $version = defined('PLUGIN_MONPLUGIN_VERSION') ? PLUGIN_MONPLUGIN_VERSION : '1.7.1';
 
     // Mapping profil → fichier CSS
     $profile_css_map = [
@@ -40,6 +176,12 @@ function plugin_monplugin_inject_css()
         11 => 'front/asset.php?type=css&file=technicien.css',   // Technicien
          1 => 'front/asset.php?type=css&file=employe.css',      // Employe / Self-Service
     ];
+
+    if (($is_ticket_page || $is_form_render) && plugin_monplugin_is_selfservice_profile()) {
+        plugin_monplugin_add_selfservice_assets();
+        $PLUGIN_HOOKS['add_javascript']['monplugin'][] = 'front/asset.php?type=js&file=modal-fix.js';
+        return;
+    }
 
     if (isset($profile_css_map[$profile_id])) {
         $css_file = $profile_css_map[$profile_id];
